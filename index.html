@@ -46,16 +46,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 .filter-group select, .filter-group input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: #fff; min-width: 120px; }
 .filter-group select[multiple] { height: 100px; }
 .filter-group input[type="text"] { width: 130px; }
-.hero-select-wrap { position: relative; }
-.hero-select-popup { display: none; position: absolute; top: 100%; left: 0; z-index: 100; background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.15); width: 380px; padding: 8px; max-height: 320px; overflow-y: auto; }
-.hero-select-popup.show { display: block; }
-.hero-select-popup .hero-check { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-.hero-select-popup .hero-check:hover { background: #f1f5f9; }
-.hero-select-popup .hero-check img { width: 28px; height: 28px; border-radius: 4px; }
 .hero-chip { display: inline-flex; align-items: center; gap: 4px; background: #e2e8f0; border-radius: 12px; padding: 2px 8px 2px 2px; font-size: 12px; margin: 2px; }
 .hero-chip img { width: 20px; height: 20px; border-radius: 3px; }
 .hero-chip .remove { cursor: pointer; font-weight: bold; color: #94a3b8; margin-left: 2px; }
 .hero-chip .remove:hover { color: var(--red); }
+.hero-autocomplete-wrap { position: relative; }
+.hero-autocomplete-wrap input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; width: 160px; }
+.hero-suggestions { display: none; position: absolute; top: 100%; left: 0; z-index: 100; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15); width: 200px; max-height: 220px; overflow-y: auto; }
+.hero-suggestions.show { display: block; }
+.hero-suggestion-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.hero-suggestion-item:hover { background: #f1f5f9; }
+.hero-suggestion-item img { width: 28px; height: 28px; border-radius: 4px; }
+.hero-suggestion-item .highlight { color: var(--blue); font-weight: 600; }
 
 .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s; }
 .btn-primary { background: var(--blue); color: #fff; }
@@ -163,6 +165,12 @@ tbody tr:hover { background: #f8fafc; }
         <input type="date" id="filterDateTo" onchange="onDateChange()" oninput="onDateChange()">
       </div>
       <div class="filter-group">
+        <label>赛季</label>
+        <select id="filterSeason" onchange="onSeasonChange()">
+          <option value="">-- 请选择赛季 --</option>
+        </select>
+      </div>
+      <div class="filter-group">
         <label>战队</label>
         <select id="filterTeam" multiple size="4">
         </select>
@@ -172,13 +180,17 @@ tbody tr:hover { background: #f8fafc; }
         <select id="filterPlayer" multiple size="4">
         </select>
       </div>
+      <div class="filter-group" id="filterWinrateHeroGroup">
+        <label>英雄</label>
+        <div class="hero-autocomplete-wrap">
+          <input type="text" id="filterWinrateHero" placeholder="输入英雄名称..." autocomplete="off" oninput="onWinrateHeroInput()" onfocus="onWinrateHeroInput()">
+          <div class="hero-suggestions" id="heroSuggestions"></div>
+        </div>
+      </div>
       <div class="filter-group" id="filterHeroGroup" style="display:none">
         <label>英雄</label>
-        <div class="hero-select-wrap">
-          <button class="btn btn-outline btn-sm" id="btnHeroSelect" style="min-width:100px">选择英雄 ▼</button>
-          <div class="hero-select-popup" id="heroPopup"></div>
-        </div>
-        <div id="selectedHeroChips" style="display:flex;flex-wrap:wrap;gap:2px;max-width:200px;margin-top:4px"></div>
+        <select id="filterMatchHero" multiple size="4">
+        </select>
       </div>
       <div class="filter-group" style="align-self:flex-end">
         <button class="btn btn-primary" id="btnQuery">查询</button>
@@ -194,6 +206,12 @@ tbody tr:hover { background: #f8fafc; }
 <script src="data.js"></script>
 <script>
 const D = window.GAME_DATA;
+
+const SEASONS = [
+  { name: '2026年KPL春季赛', dateFrom: '20260114', dateTo: '20260411' },
+  { name: '2026年KPL挑战者杯', dateFrom: '20260425', dateTo: '20260523' }
+];
+
 function dateStrToInput(dateStr) {
   // dateStr is YYYYMMDD, convert to YYYY-MM-DD for input[type=date]
   if (!dateStr || dateStr.length < 8) return '';
@@ -202,11 +220,12 @@ function dateStrToInput(dateStr) {
 
 let state = {
   tab: 'winrate',
-  dateFrom: D.meta.dateMin,
-  dateTo: D.meta.dateMax,
+  dateFrom: '',
+  dateTo: '',
   teams: [],
   players: [],
   heroes: [],
+  winrateHero: '',
   sortCol: 'rate',
   sortDir: 'desc'
 };
@@ -215,8 +234,14 @@ let state = {
 document.getElementById('headerMeta').textContent =
   `${D.meta.totalMatches} 场比赛 · ${D.meta.totalGames} 局 · ${D.meta.totalTeams} 支战队 · ${D.meta.totalPlayers} 名选手 · ${D.meta.totalHeroes} 个英雄`;
 
-document.getElementById('filterDateFrom').value = dateStrToInput(D.meta.dateMin);
-document.getElementById('filterDateTo').value = dateStrToInput(D.meta.dateMax);
+// Populate season dropdown
+const selSeason = document.getElementById('filterSeason');
+SEASONS.forEach(s => {
+  const o = document.createElement('option');
+  o.value = s.dateFrom + '|' + s.dateTo;
+  o.textContent = s.name;
+  selSeason.appendChild(o);
+});
 
 function heroImg(name) {
   if (!name) return 'heroes/default.png';
@@ -302,15 +327,12 @@ function rebuildPlayerDropdown() {
   });
 }
 
-function rebuildHeroPopup() {
+function rebuildMatchHeroDropdown() {
+  const selMatchHero = document.getElementById('filterMatchHero');
   const scope = getDateFilteredScope();
-  const popup = document.getElementById('heroPopup');
-  popup.innerHTML = '<input type="text" class="hero-search" placeholder="搜索英雄..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;font-size:13px" oninput="filterHeroPopup(this.value)">';
-  const grid = document.createElement('div');
-  grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:2px;max-height:260px;overflow-y:auto';
-  grid.id = 'heroPopupGrid';
+  const prevSelected = [...selMatchHero.selectedOptions].map(o => o.value);
+  selMatchHero.innerHTML = '';
 
-  // Filter heroes by selected players (only show heroes those players have used)
   const chosenPlayers = [...selPlayer.selectedOptions].map(o => o.value);
   let candidates = scope.heroes;
   if (chosenPlayers.length > 0) {
@@ -329,65 +351,74 @@ function rebuildHeroPopup() {
   }
 
   candidates.forEach(h => {
-    const label = document.createElement('label');
-    label.className = 'hero-check';
-    label.setAttribute('data-hero-name', h);
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.value = h;
-    cb.checked = state.heroes.includes(h);
-    cb.addEventListener('change', () => {
-      if (cb.checked) { if (!state.heroes.includes(h)) state.heroes.push(h); }
-      else { state.heroes = state.heroes.filter(x => x !== h); }
-      renderHeroChips();
-    });
-    label.appendChild(cb);
-    const img = document.createElement('img');
-    img.src = heroImg(h);
-    img.onerror = () => { img.src = 'heroes/default.png'; };
-    label.appendChild(img);
-    label.appendChild(document.createTextNode(h));
-    grid.appendChild(label);
+    const o = document.createElement('option');
+    o.value = h;
+    o.textContent = h;
+    if (prevSelected.includes(h)) o.selected = true;
+    selMatchHero.appendChild(o);
   });
-  popup.appendChild(grid);
 }
 
 function updateAllDropdowns() {
   rebuildTeamDropdown();
   rebuildPlayerDropdown();
-  rebuildHeroPopup();
+  rebuildMatchHeroDropdown();
 }
 
-function filterHeroPopup(query) {
-  const q = query.toLowerCase();
-  document.querySelectorAll('#heroPopupGrid .hero-check').forEach(el => {
-    const name = el.getAttribute('data-hero-name') || '';
-    el.style.display = name.toLowerCase().includes(q) ? '' : 'none';
-  });
-}
+// Autocomplete for winrate hero input
+function onWinrateHeroInput() {
+  const input = document.getElementById('filterWinrateHero');
+  const suggestions = document.getElementById('heroSuggestions');
+  const query = input.value.trim().toLowerCase();
 
-function renderHeroChips() {
-  const container = document.getElementById('selectedHeroChips');
-  container.innerHTML = state.heroes.map(h =>
-    `<span class="hero-chip"><img src="${heroImg(h)}" onerror="this.src='heroes/default.png'">${h}<span class="remove" data-hero="${h}">&times;</span></span>`
-  ).join('');
-  container.querySelectorAll('.remove').forEach(el => {
-    el.addEventListener('click', e => {
-      e.stopPropagation();
-      state.heroes = state.heroes.filter(h => h !== el.dataset.hero);
-      renderHeroChips();
-      rebuildHeroPopup();
+  if (!query) {
+    suggestions.classList.remove('show');
+    state.winrateHero = '';
+    return;
+  }
+
+  const scope = getDateFilteredScope();
+  const matches = scope.heroes.filter(h => h.toLowerCase().includes(query)).slice(0, 8);
+
+  if (matches.length === 0) {
+    suggestions.classList.remove('show');
+    return;
+  }
+
+  suggestions.innerHTML = matches.map(h => {
+    const idx = h.toLowerCase().indexOf(query);
+    const before = h.substring(0, idx);
+    const match = h.substring(idx, idx + query.length);
+    const after = h.substring(idx + query.length);
+    return `<div class="hero-suggestion-item" data-hero="${h}">
+      <img src="${heroImg(h)}" onerror="this.src='heroes/default.png'">
+      <span>${before}<span class="highlight">${match}</span>${after}</span>
+    </div>`;
+  }).join('');
+
+  suggestions.querySelectorAll('.hero-suggestion-item').forEach(item => {
+    item.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const hero = item.dataset.hero;
+      input.value = hero;
+      state.winrateHero = hero;
+      suggestions.classList.remove('show');
     });
   });
+
+  suggestions.classList.add('show');
 }
 
-document.getElementById('btnHeroSelect').addEventListener('click', () => {
-  document.getElementById('heroPopup').classList.toggle('show');
-});
+// Close suggestions on outside click
 document.addEventListener('click', e => {
-  const wrap = document.querySelector('.hero-select-wrap');
-  if (wrap && !wrap.contains(e.target)) document.getElementById('heroPopup').classList.remove('show');
+  const wraps = document.querySelectorAll('.hero-autocomplete-wrap');
+  wraps.forEach(wrap => {
+    if (!wrap.contains(e.target)) {
+      wrap.querySelector('.hero-suggestions').classList.remove('show');
+    }
+  });
 });
+
 
 document.getElementById('btnSelectTeamAll').addEventListener('click', () => {
   const teams = [...selTeam.selectedOptions].map(o => o.value);
@@ -395,12 +426,34 @@ document.getElementById('btnSelectTeamAll').addEventListener('click', () => {
   [...selPlayer.options].forEach(o => { o.selected = teams.includes(D.players.find(p => p.fullId === o.value)?.team); });
 });
 
+// Season change → auto-fill date inputs
+function onSeasonChange() {
+  const val = selSeason.value;
+  if (val) {
+    const [dateFrom, dateTo] = val.split('|');
+    document.getElementById('filterDateFrom').value = dateStrToInput(dateFrom);
+    document.getElementById('filterDateTo').value = dateStrToInput(dateTo);
+    state.dateFrom = dateFrom;
+    state.dateTo = dateTo;
+  } else {
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    state.dateFrom = '';
+    state.dateTo = '';
+  }
+  updateAllDropdowns();
+}
+
 // Date change → update state and team/player/hero dropdowns
 function onDateChange() {
   const rawFrom = document.getElementById('filterDateFrom').value;
   const rawTo = document.getElementById('filterDateTo').value;
-  state.dateFrom = rawFrom ? rawFrom.replace(/-/g, '') : D.meta.dateMin;
-  state.dateTo = rawTo ? rawTo.replace(/-/g, '') : D.meta.dateMax;
+  state.dateFrom = rawFrom ? rawFrom.replace(/-/g, '') : '';
+  state.dateTo = rawTo ? rawTo.replace(/-/g, '') : '';
+  // Clear season if manual date change doesn't match any season
+  if (rawFrom || rawTo) {
+    selSeason.value = '';
+  }
   updateAllDropdowns();
 }
 document.getElementById('filterDateFrom').addEventListener('change', onDateChange);
@@ -408,13 +461,13 @@ document.getElementById('filterDateFrom').addEventListener('input', onDateChange
 document.getElementById('filterDateTo').addEventListener('change', onDateChange);
 document.getElementById('filterDateTo').addEventListener('input', onDateChange);
 
-// Team change → update player dropdown
+// Team change → update player and hero dropdowns
 selTeam.addEventListener('change', () => {
   rebuildPlayerDropdown();
-  rebuildHeroPopup();
+  rebuildMatchHeroDropdown();
 });
 
-selPlayer.addEventListener('change', rebuildHeroPopup);
+selPlayer.addEventListener('change', rebuildMatchHeroDropdown);
 
 // Initial population
 updateAllDropdowns();
@@ -426,8 +479,18 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     state.tab = btn.dataset.tab;
     document.getElementById('filterHeroGroup').style.display = state.tab === 'match' ? '' : 'none';
+    document.getElementById('filterWinrateHeroGroup').style.display = state.tab === 'winrate' ? '' : 'none';
     document.getElementById('results').innerHTML = '';
     document.getElementById('statsBar').innerHTML = '';
+    if (state.tab === 'winrate') {
+      state.heroes = [];
+      document.getElementById('filterMatchHero').selectedIndex = -1;
+    }
+    if (state.tab === 'match') {
+      state.winrateHero = '';
+      document.getElementById('filterWinrateHero').value = '';
+      document.getElementById('heroSuggestions').classList.remove('show');
+    }
   });
 });
 
@@ -435,8 +498,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 document.getElementById('btnQuery').addEventListener('click', () => {
   const rawFrom = document.getElementById('filterDateFrom').value;
   const rawTo = document.getElementById('filterDateTo').value;
-  const newDateFrom = rawFrom ? rawFrom.replace(/-/g, '') : D.meta.dateMin;
-  const newDateTo = rawTo ? rawTo.replace(/-/g, '') : D.meta.dateMax;
+  const newDateFrom = rawFrom ? rawFrom.replace(/-/g, '') : '';
+  const newDateTo = rawTo ? rawTo.replace(/-/g, '') : '';
 
   // If date range changed, refresh dropdowns first
   if (newDateFrom !== state.dateFrom || newDateTo !== state.dateTo) {
@@ -447,22 +510,28 @@ document.getElementById('btnQuery').addEventListener('click', () => {
 
   state.players = [...selPlayer.selectedOptions].map(o => o.value);
   state.teams = [...selTeam.selectedOptions].map(o => o.value);
+  state.heroes = [...document.getElementById('filterMatchHero').selectedOptions].map(o => o.value);
+  state.winrateHero = document.getElementById('filterWinrateHero').value.trim();
   if (state.tab === 'winrate') renderWinRate();
   else renderMatches();
 });
 
 document.getElementById('btnReset').addEventListener('click', () => {
-  document.getElementById('filterDateFrom').value = dateStrToInput(D.meta.dateMin);
-  document.getElementById('filterDateTo').value = dateStrToInput(D.meta.dateMax);
-  state.dateFrom = D.meta.dateMin;
-  state.dateTo = D.meta.dateMax;
+  document.getElementById('filterDateFrom').value = '';
+  document.getElementById('filterDateTo').value = '';
+  selSeason.value = '';
+  state.dateFrom = '';
+  state.dateTo = '';
   state.heroes = [];
   state.players = [];
+  state.winrateHero = '';
+  document.getElementById('filterWinrateHero').value = '';
+  document.getElementById('heroSuggestions').classList.remove('show');
+  document.getElementById('filterMatchHero').selectedIndex = -1;
   state.teams = [];
   state.sortCol = null;
   state.sortDir = 'desc';
   updateAllDropdowns();
-  renderHeroChips();
   document.getElementById('results').innerHTML = '';
   document.getElementById('statsBar').innerHTML = '';
 });
@@ -501,7 +570,7 @@ function renderWinRate() {
         if (!p.playerId || !p.hero) return;
         const key = `${p.playerId}|${p.hero}`;
         if (!stats[key]) {
-          stats[key] = { playerId: p.playerId, hero: p.hero, team: '', wins: 0, losses: 0 };
+          stats[key] = { playerId: p.playerId, hero: p.hero, wins: 0, losses: 0 };
         }
         if (team.won) stats[key].wins++;
         else stats[key].losses++;
@@ -509,16 +578,12 @@ function renderWinRate() {
     });
   });
 
-  // Fill team info
-  const playerTeamMap = {};
-  D.players.forEach(p => { playerTeamMap[p.fullId] = p.team; });
-  Object.values(stats).forEach(s => {
-    s.team = playerTeamMap[s.playerId] || '';
-  });
-
   let rows = Object.values(stats);
   if (state.players.length > 0) {
     rows = rows.filter(r => state.players.includes(r.playerId));
+  }
+  if (state.winrateHero) {
+    rows = rows.filter(r => r.hero === state.winrateHero);
   }
 
   // Sort
@@ -527,7 +592,7 @@ function renderWinRate() {
       let va, vb;
       switch (state.sortCol) {
         case 'player': va = a.playerId; vb = b.playerId; break;
-        case 'team': va = a.team; vb = b.team; break;
+
         case 'hero': va = a.hero; vb = b.hero; break;
         case 'wins': va = a.wins; vb = b.wins; break;
         case 'losses': va = a.losses; vb = b.losses; break;
@@ -559,7 +624,6 @@ function renderWinRate() {
       <table>
         <thead><tr>
           ${sortHeader('player', '选手')}
-          ${sortHeader('team', '战队')}
           ${sortHeader('hero', '英雄')}
           ${sortHeader('wins', '胜场')}
           ${sortHeader('losses', '负场')}
@@ -573,7 +637,6 @@ function renderWinRate() {
             const rateClass = rate >= 60 ? 'high' : rate >= 50 ? 'mid' : 'low';
             return `<tr>
               <td>${r.playerId}</td>
-              <td>${r.team}</td>
               <td><div class="hero-cell">${heroImgTag(r.hero)} ${r.hero}</div></td>
               <td>${r.wins}</td>
               <td>${r.losses}</td>
@@ -604,6 +667,14 @@ function renderWinRate() {
 // --- Match Cards ---
 function renderMatches() {
   const games = getFilteredGames();
+
+  // 计算每场比赛的最大局数，用于判断巅峰对决
+  const matchMaxGame = {};
+  games.forEach(g => {
+    if (!matchMaxGame[g.matchId] || g.gameNum > matchMaxGame[g.matchId]) {
+      matchMaxGame[g.matchId] = g.gameNum;
+    }
+  });
 
   document.getElementById('statsBar').innerHTML = `共 <strong>${games.length}</strong> 局比赛`;
 
@@ -662,7 +733,7 @@ function renderMatches() {
 
     const dateStr = g.matchId.substring(0, 4) + '-' + g.matchId.substring(4, 6) + '-' + g.matchId.substring(6, 8);
 
-    const isPeakShowdown = allPicks.length === 0;
+    const isPeakShowdown = g.gameNum === matchMaxGame[g.matchId] && (g.gameNum === 7 || g.gameNum === 9) && (allPicks.length === 0 || allPicks.every(bp => !bp.hero));
 
     function peakItemHTML(player) {
       const hero = player.hero || '';
