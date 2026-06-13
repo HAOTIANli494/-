@@ -58,6 +58,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 .hero-suggestion-item:hover { background: #f1f5f9; }
 .hero-suggestion-item img { width: 28px; height: 28px; border-radius: 4px; }
 .hero-suggestion-item .highlight { color: var(--blue); font-weight: 600; }
+.loading-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f8fafc; z-index: 9999; }
+.loading-overlay.hidden { display: none; }
+.loading-spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: var(--blue); border-radius: 50%; animation: spin .6s linear infinite; margin-bottom: 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-overlay p { color: var(--text2); font-size: 14px; }
 
 .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s; }
 .btn-primary { background: var(--blue); color: #fff; }
@@ -143,6 +148,11 @@ tbody tr:hover { background: #f8fafc; }
 </head>
 <body>
 
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <p>加载数据中...</p>
+</div>
+
 <div class="header">
   <h1>王者荣耀赛事数据查询</h1>
   <span class="meta" id="headerMeta"></span>
@@ -203,9 +213,53 @@ tbody tr:hover { background: #f8fafc; }
   <div id="results"></div>
 </div>
 
-<script src="data.js"></script>
 <script>
-const D = window.GAME_DATA;
+// Async load data.js with localStorage cache
+(function() {
+  var CACHE_KEY = 'kpl_data_v2';
+  window.__dataReady = false;
+
+  function injectAndGo(content) {
+    var s = document.createElement('script');
+    s.textContent = content;
+    document.head.appendChild(s);
+    window.__dataReady = true;
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    if (typeof initApp === 'function') initApp();
+  }
+
+  var cached = null;
+  try { cached = localStorage.getItem(CACHE_KEY); } catch(e) {}
+
+  if (cached) {
+    injectAndGo(cached);
+    return;
+  }
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', 'data.js', true);
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      try { localStorage.setItem(CACHE_KEY, xhr.responseText); } catch(e) {}
+      injectAndGo(xhr.responseText);
+    }
+  };
+  xhr.onerror = function() {
+    var s = document.createElement('script');
+    s.src = 'data.js';
+    s.onload = function() {
+      window.__dataReady = true;
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      if (typeof initApp === 'function') initApp();
+    };
+    document.head.appendChild(s);
+  };
+  xhr.send();
+})();
+</script>
+<script>
+function initApp() {
+var D = window.GAME_DATA;
 
 const SEASONS = [
   { name: '2026年KPL春季赛', dateFrom: '20260114', dateTo: '20260411' },
@@ -829,6 +883,13 @@ document.addEventListener('keydown', e => {
 
 // --- Auto query on load ---
 renderWinRate();
+
+// Expose handlers for HTML onchange/oninput attributes
+window.onDateChange = onDateChange;
+window.onSeasonChange = onSeasonChange;
+window.onWinrateHeroInput = onWinrateHeroInput;
+}
+if (window.__dataReady) initApp();
 </script>
 
 </body>
