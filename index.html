@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>王者荣耀赛事数据查询系统</title>
+<style>
+:root {
+  --blue: #2563eb;
+  --blue-bg: #eff6ff;
+  --blue-border: #93c5fd;
+  --red: #dc2626;
+  --red-bg: #fef2f2;
+  --red-border: #fca5a5;
+  --gold: #f59e0b;
+  --gold-bg: #fffbeb;
+  --gold-border: #fcd34d;
+  --bg: #f8fafc;
+  --surface: #fff;
+  --text: #1e293b;
+  --text2: #64748b;
+  --border: #e2e8f0;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --radius: 10px;
+  --gap: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+
+.header { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: #fff; padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 22px; font-weight: 700; letter-spacing: .5px; }
+.header .meta { font-size: 12px; color: #94a3b8; }
+
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+.tabs { display: flex; gap: 0; margin-bottom: 20px; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.tab-btn { flex: 1; padding: 14px 20px; border: none; background: #fff; font-size: 15px; font-weight: 600; cursor: pointer; transition: all .2s; color: var(--text2); position: relative; }
+.tab-btn.active { color: var(--blue); background: var(--blue-bg); }
+.tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--blue); }
+.tab-btn:hover { color: var(--blue); }
+
+.filters { background: var(--surface); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px; box-shadow: var(--shadow); }
+.filter-row { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: flex-end; }
+.filter-group { display: flex; flex-direction: column; gap: 4px; min-width: 140px; }
+.filter-group label { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; }
+.filter-group select, .filter-group input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: #fff; min-width: 120px; }
+.filter-group select[multiple] { height: 100px; }
+.filter-group input[type="text"] { width: 130px; }
+.hero-select-wrap { position: relative; }
+.hero-select-popup { display: none; position: absolute; top: 100%; left: 0; z-index: 100; background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.15); width: 380px; padding: 8px; max-height: 320px; overflow-y: auto; }
+.hero-select-popup.show { display: block; }
+.hero-select-popup .hero-check { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.hero-select-popup .hero-check:hover { background: #f1f5f9; }
+.hero-select-popup .hero-check img { width: 28px; height: 28px; border-radius: 4px; }
+.hero-chip { display: inline-flex; align-items: center; gap: 4px; background: #e2e8f0; border-radius: 12px; padding: 2px 8px 2px 2px; font-size: 12px; margin: 2px; }
+.hero-chip img { width: 20px; height: 20px; border-radius: 3px; }
+.hero-chip .remove { cursor: pointer; font-weight: bold; color: #94a3b8; margin-left: 2px; }
+.hero-chip .remove:hover { color: var(--red); }
+
+.btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s; }
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-outline { background: #fff; color: var(--blue); border: 1px solid var(--blue); }
+.btn-outline:hover { background: var(--blue-bg); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); }
+.btn-ghost:hover { background: #f1f5f9; }
+
+.stats-bar { display: flex; gap: 16px; margin-bottom: 16px; font-size: 13px; color: var(--text2); }
+.stats-bar strong { color: var(--text); }
+
+.table-wrap { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+thead th { background: #f8fafc; padding: 12px 14px; text-align: left; font-weight: 600; color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; border-bottom: 2px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; position: sticky; top: 0; }
+thead th:hover { color: var(--text); }
+thead th .sort-arrow { opacity: .3; margin-left: 4px; }
+thead th.sorted .sort-arrow { opacity: 1; color: var(--blue); }
+tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+tbody tr:hover { background: #f8fafc; }
+.hero-cell { display: flex; align-items: center; gap: 8px; }
+.hero-cell img { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; background: #f1f5f9; }
+.win-rate { font-weight: 700; }
+.win-rate.high { color: #16a34a; }
+.win-rate.mid { color: #d97706; }
+.win-rate.low { color: #dc2626; }
+
+.match-cards { display: flex; flex-direction: column; gap: 14px; }
+
+.match-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; border: 1px solid var(--border); }
+.match-card__top { display: flex; align-items: center; justify-content: center; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid var(--border); gap: 16px; }
+.match-card__team { display: flex; align-items: center; gap: 8px; }
+.match-card__team .team-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.match-card__center { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.match-card__center .match-date { font-size: 11px; color: var(--text2); }
+.match-card__center .match-game { font-size: 11px; color: var(--text2); font-weight: 600; }
+.match-card__center .dot { color: #cbd5e1; }
+.side-tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.side-tag.blue-side { background: #dbeafe; color: var(--blue); }
+.side-tag.red-side { background: #fee2e2; color: var(--red); }
+.result-tag { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 10px; white-space: nowrap; }
+.result-tag.win { background: #dcfce7; color: #16a34a; }
+.result-tag.loss { background: #f1f5f9; color: #94a3b8; }
+
+.bp-row { display: flex; align-items: center; justify-content: center; gap: 3px; padding: 5px 16px; border-bottom: 1px solid #f1f5f9; }
+.bp-row:last-child { border-bottom: none; }
+.bp-row img { width: 36px; height: 36px; border-radius: 5px; object-fit: cover; background: #f1f5f9; border: 2px solid #e2e8f0; flex-shrink: 0; }
+.bp-row.ban-row img { border-color: #cbd5e1; opacity: .75; }
+.bp-divider { font-size: 10px; font-weight: 800; color: #cbd5e1; padding: 0 10px; flex-shrink: 0; letter-spacing: 2px; }
+
+.bp-block { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; }
+.bp-block:last-child { border-bottom: none; }
+.bp-block__label { font-size: 11px; font-weight: 700; color: var(--text2); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.bp-block__label::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
+.bp-block__row { display: flex; gap: 12px; }
+.bp-block__side { flex: 1; display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+.bp-block__side.right-side { flex-direction: row-reverse; }
+
+.bp-item { display: flex; flex-direction: column; align-items: center; width: 72px; flex-shrink: 0; }
+.bp-item .bp-img-wrap { line-height: 0; }
+.bp-item img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: #f1f5f9; border: 2px solid #e2e8f0; }
+.bp-item.ban-item img { border-color: #cbd5e1; opacity: .7; }
+.bp-item .bp-order { font-size: 10px; font-weight: 700; color: #64748b; margin-top: 3px; }
+.bp-item .bp-hero-name { font-size: 10px; color: #334155; margin-top: 3px; text-align: center; line-height: 1.2; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-item .bp-player-name { font-size: 10px; font-weight: 600; color: #1e293b; margin-top: 1px; }
+.bp-item .bp-role { font-size: 9px; color: #94a3b8; }
+
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+@media (max-width: 768px) {
+  .bp-block__row { flex-direction: column; }
+  .bp-block__side.right-side { justify-content: flex-start; }
+  .match-card__top { flex-wrap: wrap; gap: 10px; }
+  .match-card__team .team-name { font-size: 12px; }
+  .bp-row img { width: 28px; height: 28px; }
+  .bp-divider { font-size: 9px; padding: 0 6px; }
+  .filter-row { flex-direction: column; }
+  .container { padding: 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>王者荣耀赛事数据查询</h1>
+  <span class="meta" id="headerMeta"></span>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="winrate">英雄胜率查询</button>
+    <button class="tab-btn" data-tab="match">比赛记录查看</button>
+  </div>
+
+  <div class="filters" id="filters">
+    <div class="filter-row">
+      <div class="filter-group">
+        <label>开始日期</label>
+        <input type="date" id="filterDateFrom" onchange="onDateChange()" oninput="onDateChange()">
+      </div>
+      <div class="filter-group">
+        <label>结束日期</label>
+        <input type="date" id="filterDateTo" onchange="onDateChange()" oninput="onDateChange()">
+      </div>
+      <div class="filter-group">
+        <label>战队</label>
+        <select id="filterTeam" multiple size="4">
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>选手 <button class="btn btn-sm btn-ghost" id="btnSelectTeamAll" title="选择当前战队全部选手">全选队员</button></label>
+        <select id="filterPlayer" multiple size="4">
+        </select>
+      </div>
+      <div class="filter-group" id="filterHeroGroup" style="display:none">
+        <label>英雄</label>
+        <div class="hero-select-wrap">
+          <button class="btn btn-outline btn-sm" id="btnHeroSelect" style="min-width:100px">选择英雄 ▼</button>
+          <div class="hero-select-popup" id="heroPopup"></div>
+        </div>
+        <div id="selectedHeroChips" style="display:flex;flex-wrap:wrap;gap:2px;max-width:200px;margin-top:4px"></div>
+      </div>
+      <div class="filter-group" style="align-self:flex-end">
+        <button class="btn btn-primary" id="btnQuery">查询</button>
+        <button class="btn btn-outline" id="btnReset" style="margin-left:8px">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-bar" id="statsBar"></div>
+  <div id="results"></div>
+</div>
+
+<script src="data.js"></script>
+<script>
+const D = window.GAME_DATA;
+function dateStrToInput(dateStr) {
+  // dateStr is YYYYMMDD, convert to YYYY-MM-DD for input[type=date]
+  if (!dateStr || dateStr.length < 8) return '';
+  return dateStr.substring(0, 4) + '-' + dateStr.substring(4, 6) + '-' + dateStr.substring(6, 8);
+}
+
+let state = {
+  tab: 'winrate',
+  dateFrom: D.meta.dateMin,
+  dateTo: D.meta.dateMax,
+  teams: [],
+  players: [],
+  heroes: [],
+  sortCol: 'rate',
+  sortDir: 'desc'
+};
+
+// --- Init ---
+document.getElementById('headerMeta').textContent =
+  `${D.meta.totalMatches} 场比赛 · ${D.meta.totalGames} 局 · ${D.meta.totalTeams} 支战队 · ${D.meta.totalPlayers} 名选手 · ${D.meta.totalHeroes} 个英雄`;
+
+document.getElementById('filterDateFrom').value = dateStrToInput(D.meta.dateMin);
+document.getElementById('filterDateTo').value = dateStrToInput(D.meta.dateMax);
+
+function heroImg(name) {
+  if (!name) return 'heroes/default.png';
+  let f = D.heroImageMap[name];
+  if (!f) {
+    const alt = name.replace(/\(/g, '（').replace(/\)/g, '）');
+    f = D.heroImageMap[alt];
+  }
+  if (!f) {
+    const alt2 = name.replace(/（/g, '(').replace(/）/g, ')');
+    f = D.heroImageMap[alt2];
+  }
+  return `heroes/${f || 'default.png'}`;
+}
+function heroImgTag(name, size) {
+  const s = size || 36;
+  return `<img src="${heroImg(name)}" onerror="this.src='heroes/default.png'" width="${s}" height="${s}" alt="${name}">`;
+}
+
+// --- Populate dropdowns ---
+const selTeam = document.getElementById('filterTeam');
+const selPlayer = document.getElementById('filterPlayer');
+
+function getDateFilteredScope() {
+  const df = state.dateFrom || D.meta.dateMin;
+  const dt = state.dateTo || D.meta.dateMax;
+  const scopeTeams = new Set();
+  const scopePlayers = new Set();
+  const scopeHeroes = new Set();
+  D.games.forEach(g => {
+    if (g.date >= df && g.date <= dt) {
+      scopeTeams.add(g.team1.name);
+      scopeTeams.add(g.team2.name);
+      [g.team1, g.team2].forEach(t => {
+        t.players.forEach(p => {
+          if (p.playerId) scopePlayers.add(p.playerId);
+          if (p.hero) scopeHeroes.add(p.hero);
+        });
+      });
+      g.bpSequence.forEach(bp => {
+        if (bp.hero) scopeHeroes.add(bp.hero);
+      });
+    }
+  });
+  return {
+    teams: [...scopeTeams].sort(),
+    players: [...scopePlayers].sort(),
+    heroes: [...scopeHeroes].sort()
+  };
+}
+
+function rebuildTeamDropdown() {
+  const scope = getDateFilteredScope();
+  const prevSelected = [...selTeam.selectedOptions].map(o => o.value);
+  selTeam.innerHTML = '';
+  scope.teams.forEach(name => {
+    const o = document.createElement('option');
+    o.value = name;
+    o.textContent = name;
+    if (prevSelected.includes(name)) o.selected = true;
+    selTeam.appendChild(o);
+  });
+}
+
+function rebuildPlayerDropdown() {
+  const scope = getDateFilteredScope();
+  const prevSelected = [...selPlayer.selectedOptions].map(o => o.value);
+  selPlayer.innerHTML = '';
+  const chosenTeams = [...selTeam.selectedOptions].map(o => o.value);
+  let candidates = scope.players;
+  if (chosenTeams.length > 0) {
+    candidates = candidates.filter(pid => {
+      const p = D.players.find(pl => pl.fullId === pid);
+      return p && chosenTeams.includes(p.team);
+    });
+  }
+  candidates.forEach(pid => {
+    const o = document.createElement('option');
+    o.value = pid;
+    o.textContent = pid;
+    if (prevSelected.includes(pid)) o.selected = true;
+    selPlayer.appendChild(o);
+  });
+}
+
+function rebuildHeroPopup() {
+  const scope = getDateFilteredScope();
+  const popup = document.getElementById('heroPopup');
+  popup.innerHTML = '<input type="text" class="hero-search" placeholder="搜索英雄..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;font-size:13px" oninput="filterHeroPopup(this.value)">';
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:2px;max-height:260px;overflow-y:auto';
+  grid.id = 'heroPopupGrid';
+
+  // Filter heroes by selected players (only show heroes those players have used)
+  const chosenPlayers = [...selPlayer.selectedOptions].map(o => o.value);
+  let candidates = scope.heroes;
+  if (chosenPlayers.length > 0) {
+    const playerHeroes = new Set();
+    D.games.forEach(g => {
+      const df = state.dateFrom || D.meta.dateMin;
+      const dt = state.dateTo || D.meta.dateMax;
+      if (g.date < df || g.date > dt) return;
+      [g.team1, g.team2].forEach(t => {
+        t.players.forEach(p => {
+          if (chosenPlayers.includes(p.playerId) && p.hero) playerHeroes.add(p.hero);
+        });
+      });
+    });
+    candidates = candidates.filter(h => playerHeroes.has(h));
+  }
+
+  candidates.forEach(h => {
+    const label = document.createElement('label');
+    label.className = 'hero-check';
+    label.setAttribute('data-hero-name', h);
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = h;
+    cb.checked = state.heroes.includes(h);
+    cb.addEventListener('change', () => {
+      if (cb.checked) { if (!state.heroes.includes(h)) state.heroes.push(h); }
+      else { state.heroes = state.heroes.filter(x => x !== h); }
+      renderHeroChips();
+    });
+    label.appendChild(cb);
+    const img = document.createElement('img');
+    img.src = heroImg(h);
+    img.onerror = () => { img.src = 'heroes/default.png'; };
+    label.appendChild(img);
+    label.appendChild(document.createTextNode(h));
+    grid.appendChild(label);
+  });
+  popup.appendChild(grid);
+}
+
+function updateAllDropdowns() {
+  rebuildTeamDropdown();
+  rebuildPlayerDropdown();
+  rebuildHeroPopup();
+}
+
+function filterHeroPopup(query) {
+  const q = query.toLowerCase();
+  document.querySelectorAll('#heroPopupGrid .hero-check').forEach(el => {
+    const name = el.getAttribute('data-hero-name') || '';
+    el.style.display = name.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function renderHeroChips() {
+  const container = document.getElementById('selectedHeroChips');
+  container.innerHTML = state.heroes.map(h =>
+    `<span class="hero-chip"><img src="${heroImg(h)}" onerror="this.src='heroes/default.png'">${h}<span class="remove" data-hero="${h}">&times;</span></span>`
+  ).join('');
+  container.querySelectorAll('.remove').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      state.heroes = state.heroes.filter(h => h !== el.dataset.hero);
+      renderHeroChips();
+      rebuildHeroPopup();
+    });
+  });
+}
+
+document.getElementById('btnHeroSelect').addEventListener('click', () => {
+  document.getElementById('heroPopup').classList.toggle('show');
+});
+document.addEventListener('click', e => {
+  const wrap = document.querySelector('.hero-select-wrap');
+  if (wrap && !wrap.contains(e.target)) document.getElementById('heroPopup').classList.remove('show');
+});
+
+document.getElementById('btnSelectTeamAll').addEventListener('click', () => {
+  const teams = [...selTeam.selectedOptions].map(o => o.value);
+  if (teams.length === 0) { alert('请先选择战队'); return; }
+  [...selPlayer.options].forEach(o => { o.selected = teams.includes(D.players.find(p => p.fullId === o.value)?.team); });
+});
+
+// Date change → update state and team/player/hero dropdowns
+function onDateChange() {
+  const rawFrom = document.getElementById('filterDateFrom').value;
+  const rawTo = document.getElementById('filterDateTo').value;
+  state.dateFrom = rawFrom ? rawFrom.replace(/-/g, '') : D.meta.dateMin;
+  state.dateTo = rawTo ? rawTo.replace(/-/g, '') : D.meta.dateMax;
+  updateAllDropdowns();
+}
+document.getElementById('filterDateFrom').addEventListener('change', onDateChange);
+document.getElementById('filterDateFrom').addEventListener('input', onDateChange);
+document.getElementById('filterDateTo').addEventListener('change', onDateChange);
+document.getElementById('filterDateTo').addEventListener('input', onDateChange);
+
+// Team change → update player dropdown
+selTeam.addEventListener('change', () => {
+  rebuildPlayerDropdown();
+  rebuildHeroPopup();
+});
+
+selPlayer.addEventListener('change', rebuildHeroPopup);
+
+// Initial population
+updateAllDropdowns();
+
+// --- Tabs ---
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.tab = btn.dataset.tab;
+    document.getElementById('filterHeroGroup').style.display = state.tab === 'match' ? '' : 'none';
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('statsBar').innerHTML = '';
+  });
+});
+
+// --- Query ---
+document.getElementById('btnQuery').addEventListener('click', () => {
+  const rawFrom = document.getElementById('filterDateFrom').value;
+  const rawTo = document.getElementById('filterDateTo').value;
+  const newDateFrom = rawFrom ? rawFrom.replace(/-/g, '') : D.meta.dateMin;
+  const newDateTo = rawTo ? rawTo.replace(/-/g, '') : D.meta.dateMax;
+
+  // If date range changed, refresh dropdowns first
+  if (newDateFrom !== state.dateFrom || newDateTo !== state.dateTo) {
+    state.dateFrom = newDateFrom;
+    state.dateTo = newDateTo;
+    updateAllDropdowns();
+  }
+
+  state.players = [...selPlayer.selectedOptions].map(o => o.value);
+  state.teams = [...selTeam.selectedOptions].map(o => o.value);
+  if (state.tab === 'winrate') renderWinRate();
+  else renderMatches();
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  document.getElementById('filterDateFrom').value = dateStrToInput(D.meta.dateMin);
+  document.getElementById('filterDateTo').value = dateStrToInput(D.meta.dateMax);
+  state.dateFrom = D.meta.dateMin;
+  state.dateTo = D.meta.dateMax;
+  state.heroes = [];
+  state.players = [];
+  state.teams = [];
+  state.sortCol = null;
+  state.sortDir = 'desc';
+  updateAllDropdowns();
+  renderHeroChips();
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('statsBar').innerHTML = '';
+});
+
+// --- Filtering ---
+function getFilteredGames() {
+  let games = D.games;
+  if (state.dateFrom) games = games.filter(g => g.date >= state.dateFrom);
+  if (state.dateTo) games = games.filter(g => g.date <= state.dateTo);
+  if (state.teams.length > 0) {
+    games = games.filter(g => state.teams.includes(g.team1.name) || state.teams.includes(g.team2.name));
+  }
+  if (state.players.length > 0 || state.heroes.length > 0) {
+    games = games.filter(g => {
+      const allPlayers = [...g.team1.players, ...g.team2.players];
+      const hasPlayer = state.players.length === 0 || state.players.some(pid => allPlayers.some(p => p.playerId === pid));
+      const hasHero = state.heroes.length === 0 || state.heroes.some(h => allPlayers.some(p => p.hero === h));
+      if (state.players.length > 0 && state.heroes.length > 0) {
+        // Both selected: player must have used that hero
+        return allPlayers.some(p => state.players.includes(p.playerId) && state.heroes.includes(p.hero));
+      }
+      return hasPlayer && hasHero;
+    });
+  }
+  return games;
+}
+
+// --- Win Rate Table ---
+function renderWinRate() {
+  const games = getFilteredGames();
+  const stats = {}; // key: "playerId|hero"
+
+  games.forEach(g => {
+    [g.team1, g.team2].forEach(team => {
+      team.players.forEach(p => {
+        if (!p.playerId || !p.hero) return;
+        const key = `${p.playerId}|${p.hero}`;
+        if (!stats[key]) {
+          stats[key] = { playerId: p.playerId, hero: p.hero, team: '', wins: 0, losses: 0 };
+        }
+        if (team.won) stats[key].wins++;
+        else stats[key].losses++;
+      });
+    });
+  });
+
+  // Fill team info
+  const playerTeamMap = {};
+  D.players.forEach(p => { playerTeamMap[p.fullId] = p.team; });
+  Object.values(stats).forEach(s => {
+    s.team = playerTeamMap[s.playerId] || '';
+  });
+
+  let rows = Object.values(stats);
+  if (state.players.length > 0) {
+    rows = rows.filter(r => state.players.includes(r.playerId));
+  }
+
+  // Sort
+  if (state.sortCol) {
+    rows.sort((a, b) => {
+      let va, vb;
+      switch (state.sortCol) {
+        case 'player': va = a.playerId; vb = b.playerId; break;
+        case 'team': va = a.team; vb = b.team; break;
+        case 'hero': va = a.hero; vb = b.hero; break;
+        case 'wins': va = a.wins; vb = b.wins; break;
+        case 'losses': va = a.losses; vb = b.losses; break;
+        case 'total': va = a.wins + a.losses; vb = b.wins + b.losses; break;
+        case 'rate': va = a.wins / (a.wins + a.losses); vb = b.wins / (b.wins + b.losses); break;
+        default: return 0;
+      }
+      if (typeof va === 'string') return state.sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      return state.sortDir === 'asc' ? va - vb : vb - va;
+    });
+  }
+
+  document.getElementById('statsBar').innerHTML =
+    `共 <strong>${rows.length}</strong> 条选手-英雄记录 · 筛选了 <strong>${games.length}</strong> 局比赛`;
+
+  if (rows.length === 0) {
+    document.getElementById('results').innerHTML = '<div class="empty-state"><div class="icon">📊</div><p>无匹配数据，请调整筛选条件</p></div>';
+    return;
+  }
+
+  const sortHeader = (col, label) => {
+    const sorted = state.sortCol === col;
+    const arrow = sorted ? (state.sortDir === 'asc' ? '▲' : '▼') : '';
+    return `<th class="${sorted ? 'sorted' : ''}" data-col="${col}">${label} <span class="sort-arrow">${arrow}</span></th>`;
+  };
+
+  document.getElementById('results').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          ${sortHeader('player', '选手')}
+          ${sortHeader('team', '战队')}
+          ${sortHeader('hero', '英雄')}
+          ${sortHeader('wins', '胜场')}
+          ${sortHeader('losses', '负场')}
+          ${sortHeader('total', '总场')}
+          ${sortHeader('rate', '胜率')}
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => {
+            const total = r.wins + r.losses;
+            const rate = total > 0 ? (r.wins / total * 100) : 0;
+            const rateClass = rate >= 60 ? 'high' : rate >= 50 ? 'mid' : 'low';
+            return `<tr>
+              <td>${r.playerId}</td>
+              <td>${r.team}</td>
+              <td><div class="hero-cell">${heroImgTag(r.hero)} ${r.hero}</div></td>
+              <td>${r.wins}</td>
+              <td>${r.losses}</td>
+              <td>${total}</td>
+              <td><span class="win-rate ${rateClass}">${rate.toFixed(1)}%</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // Sort click handlers
+  document.querySelectorAll('thead th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (state.sortCol === col) {
+        state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sortCol = col;
+        state.sortDir = 'desc';
+      }
+      renderWinRate();
+    });
+  });
+}
+
+// --- Match Cards ---
+function renderMatches() {
+  const games = getFilteredGames();
+
+  document.getElementById('statsBar').innerHTML = `共 <strong>${games.length}</strong> 局比赛`;
+
+  if (games.length === 0) {
+    document.getElementById('results').innerHTML = '<div class="empty-state"><div class="icon">🎮</div><p>无匹配数据，请调整筛选条件</p></div>';
+    return;
+  }
+
+  function getSideKey(team) {
+    return team.side.includes('蓝') ? '蓝' : '红';
+  }
+
+  function shortName(playerId) {
+    if (!playerId) return '';
+    const parts = playerId.split('.');
+    return parts.length > 1 ? parts.slice(1).join('.') : playerId;
+  }
+
+  function heroOnlyImg(hero) {
+    const h = (hero || '').trim();
+    if (!h) return `<img src="heroes/default.png" style="opacity:.25" alt="?">`;
+    return `<img src="${heroImg(h)}" onerror="this.src='heroes/default.png'" alt="${h}">`;
+  }
+
+  function renderGameCard(g) {
+    const t1 = g.team1;
+    const t2 = g.team2;
+
+    // Selected team goes on the left; default: blue team on left
+    let leftTeam, rightTeam;
+    if (state.teams.length > 0) {
+      if (state.teams.includes(t1.name)) {
+        leftTeam = t1;
+        rightTeam = t2;
+      } else if (state.teams.includes(t2.name)) {
+        leftTeam = t2;
+        rightTeam = t1;
+      } else {
+        leftTeam = getSideKey(t1) === '蓝' ? t1 : t2;
+        rightTeam = getSideKey(t1) === '蓝' ? t2 : t1;
+      }
+    } else {
+      leftTeam = getSideKey(t1) === '蓝' ? t1 : t2;
+      rightTeam = getSideKey(t1) === '蓝' ? t2 : t1;
+    }
+
+    const leftSide = getSideKey(leftTeam);
+    const rightSide = getSideKey(rightTeam);
+    // Get bans/picks from bpSequence in original order, grouped by side
+    const allBans = g.bpSequence.filter(bp => bp.phase === 'ban');
+    const allPicks = g.bpSequence.filter(bp => bp.phase === 'pick');
+    const leftBans = allBans.filter(bp => bp.side === leftSide);
+    const rightBans = allBans.filter(bp => bp.side === rightSide);
+    const leftPicks = allPicks.filter(bp => bp.side === leftSide);
+    const rightPicks = allPicks.filter(bp => bp.side === rightSide);
+
+    const dateStr = g.matchId.substring(0, 4) + '-' + g.matchId.substring(4, 6) + '-' + g.matchId.substring(6, 8);
+
+    const isPeakShowdown = allPicks.length === 0;
+
+    function peakItemHTML(player) {
+      const hero = player.hero || '';
+      const hasHero = !!hero;
+      return `
+        <div class="bp-item">
+          <div class="bp-img-wrap">
+            ${hasHero ? `<img src="${heroImg(hero)}" onerror="this.src='heroes/default.png'" alt="${hero}">` : '<img src="heroes/default.png" style="opacity:.3" alt="?">'}
+          </div>
+          <span class="bp-hero-name">${hasHero || '—'}</span>
+          <span class="bp-player-name">${shortName(player.playerId)}</span>
+          <span class="bp-role">${player.role}</span>
+        </div>`;
+    }
+
+    if (isPeakShowdown) {
+      return `
+        <div class="match-card">
+          <div class="match-card__top">
+            <div class="match-card__team">
+              <span class="side-tag ${leftSide === '蓝' ? 'blue-side' : 'red-side'}">${leftSide === '蓝' ? '蓝方' : '红方'}</span>
+              <span class="team-name">${leftTeam.name}</span>
+              ${leftTeam.won ? '<span class="result-tag win">胜</span>' : '<span class="result-tag loss">负</span>'}
+            </div>
+            <div class="match-card__center">
+              <span class="match-date">${dateStr}</span>
+              <span class="match-game">第${g.gameNum}局</span>
+            </div>
+            <div class="match-card__team">
+              ${rightTeam.won ? '<span class="result-tag win">胜</span>' : '<span class="result-tag loss">负</span>'}
+              <span class="team-name">${rightTeam.name}</span>
+              <span class="side-tag ${rightSide === '蓝' ? 'blue-side' : 'red-side'}">${rightSide === '蓝' ? '蓝方' : '红方'}</span>
+            </div>
+          </div>
+          <div class="bp-block">
+            <div class="bp-block__label" style="color:#f59e0b">巅峰对决 · 盲选阵容</div>
+            <div class="bp-block__row">
+              <div class="bp-block__side">
+                ${leftTeam.players.map(p => peakItemHTML(p)).join('')}
+              </div>
+              <div class="bp-block__side" style="justify-content:flex-end">
+                ${rightTeam.players.map(p => peakItemHTML(p)).join('')}
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="match-card">
+        <div class="match-card__top">
+          <div class="match-card__team">
+            <span class="side-tag ${leftSide === '蓝' ? 'blue-side' : 'red-side'}">${leftSide === '蓝' ? '蓝方' : '红方'}</span>
+            <span class="team-name">${leftTeam.name}</span>
+            ${leftTeam.won ? '<span class="result-tag win">胜</span>' : '<span class="result-tag loss">负</span>'}
+          </div>
+          <div class="match-card__center">
+            <span class="match-date">${dateStr}</span>
+            <span class="match-game">第${g.gameNum}局</span>
+          </div>
+          <div class="match-card__team">
+            ${rightTeam.won ? '<span class="result-tag win">胜</span>' : '<span class="result-tag loss">负</span>'}
+            <span class="team-name">${rightTeam.name}</span>
+            <span class="side-tag ${rightSide === '蓝' ? 'blue-side' : 'red-side'}">${rightSide === '蓝' ? '蓝方' : '红方'}</span>
+          </div>
+        </div>
+        <div class="bp-row ban-row">
+          ${leftBans.map(b => heroOnlyImg(b.hero)).join('')}
+          <span class="bp-divider">BAN</span>
+          ${rightBans.map(b => heroOnlyImg(b.hero)).join('')}
+        </div>
+        <div class="bp-row">
+          ${leftPicks.map(b => heroOnlyImg(b.hero)).join('')}
+          <span class="bp-divider">PICK</span>
+          ${rightPicks.map(b => heroOnlyImg(b.hero)).join('')}
+        </div>
+      </div>`;
+  }
+
+  document.getElementById('results').innerHTML = `
+    <div class="match-cards">
+      ${games.map(g => renderGameCard(g)).join('')}
+    </div>
+  `;
+}
+
+// --- Keyboard shortcut for query ---
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+    document.getElementById('btnQuery').click();
+  }
+});
+
+// --- Auto query on load ---
+renderWinRate();
+</script>
+
+</body>
+</html>
